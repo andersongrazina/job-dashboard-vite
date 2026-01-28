@@ -13,7 +13,7 @@ app.use(express.json());
 
 // Configurações padrão
 const DEFAULT_CONFIG = {
-  baserowUrl: process.env.BASEROW_URL || 'https://n8n-baserow.v6s8rs.easypanel.host/api/database/rows/table',
+  baserowUrl: process.env.BASEROW_URL || 'https://baserow.io/api/database/rows/table',
   baserowToken: process.env.BASEROW_TOKEN || 'xUhLDnUtV09UKOSDDd5kgW9E1GBzPA0x',
   tableId: process.env.TABLE_ID || '699'
 };
