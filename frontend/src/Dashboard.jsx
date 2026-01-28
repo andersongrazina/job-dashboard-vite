@@ -512,8 +512,8 @@ export default function Dashboard() {
                 </div>
 
                 <div className="job-card-footer">
-                  {job.url ? (
-                    <a href={job.url} target="_blank" rel="noopener noreferrer" className="job-link">
+                  {job.job_link ? (
+                    <a href={job.job_link} target="_blank" rel="noopener noreferrer" className="job-link">
                       🔗 Ver Vaga
                     </a>
                   ) : (
