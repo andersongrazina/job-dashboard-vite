@@ -13,6 +13,15 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
+  const [darkMode, setDarkMode] = useState(false)
+
+  // Estatísticas
+  const [stats, setStats] = useState({
+    totalJobs: 0,
+    uniqueCompanies: 0,
+    averageSalary: 0,
+    jobsByRegion: {}
+  })
 
   // Filtros
   const [filters, setFilters] = useState({
@@ -41,6 +50,11 @@ export default function Dashboard() {
 
   // Carregar dados ao montar
   useEffect(() => {
+    // Carregar preferência de dark mode
+    const savedDarkMode = localStorage.getItem('darkMode') === 'true'
+    setDarkMode(savedDarkMode)
+    document.documentElement.setAttribute('data-theme', savedDarkMode ? 'dark' : 'light')
+
     loadSettings()
     loadJobs()
   }, [])
@@ -48,7 +62,14 @@ export default function Dashboard() {
   // Aplicar filtros quando jobs ou filtros mudam
   useEffect(() => {
     applyFilters()
+    calculateStats()
   }, [jobs, filters])
+
+  // Salvar preferência de dark mode
+  useEffect(() => {
+    localStorage.setItem('darkMode', darkMode)
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
 
   const loadSettings = async () => {
     try {
@@ -76,6 +97,44 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const calculateStats = () => {
+    if (filteredJobs.length === 0) {
+      setStats({
+        totalJobs: 0,
+        uniqueCompanies: 0,
+        averageSalary: 0,
+        jobsByRegion: {}
+      })
+      return
+    }
+
+    // Total de vagas
+    const totalJobs = filteredJobs.length
+
+    // Empresas únicas
+    const uniqueCompanies = new Set(filteredJobs.map(job => job.company)).size
+
+    // Salário médio
+    const salaries = filteredJobs
+      .map(job => extractSalary(job.salary_raw))
+      .filter(salary => salary > 0)
+    const averageSalary = salaries.length > 0 ? Math.round(salaries.reduce((a, b) => a + b, 0) / salaries.length) : 0
+
+    // Vagas por região
+    const jobsByRegion = {}
+    filteredJobs.forEach(job => {
+      const region = job.source_region || 'Não especificado'
+      jobsByRegion[region] = (jobsByRegion[region] || 0) + 1
+    })
+
+    setStats({
+      totalJobs,
+      uniqueCompanies,
+      averageSalary,
+      jobsByRegion
+    })
   }
 
   const applyFilters = () => {
@@ -200,16 +259,38 @@ export default function Dashboard() {
     }
   }
 
+  const formatSalary = (salary) => {
+    if (!salary) return '-'
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 0
+    }).format(salary)
+  }
+
+  const formatDate = (date) => {
+    return new Date(date).toLocaleDateString('pt-BR')
+  }
+
   return (
-    <div className="dashboard">
+    <div className="dashboard" data-theme={darkMode ? 'dark' : 'light'}>
       <header className="dashboard-header">
         <h1>📊 Dashboard de Vagas</h1>
-        <button
-          className="settings-btn"
-          onClick={() => setShowSettings(!showSettings)}
-        >
-          ⚙️ Configurações
-        </button>
+        <div className="header-actions">
+          <button
+            className="theme-toggle-btn"
+            onClick={() => setDarkMode(!darkMode)}
+            title={darkMode ? 'Modo Claro' : 'Modo Escuro'}
+          >
+            {darkMode ? '☀️' : '🌙'}
+          </button>
+          <button
+            className="settings-btn"
+            onClick={() => setShowSettings(!showSettings)}
+          >
+            ⚙️ Configurações
+          </button>
+        </div>
       </header>
 
       {showSettings && (
@@ -257,6 +338,38 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Estatísticas */}
+      <div className="stats-section">
+        <div className="stat-card">
+          <div className="stat-icon">📈</div>
+          <div className="stat-content">
+            <div className="stat-label">Total de Vagas</div>
+            <div className="stat-value">{stats.totalJobs}</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">🏢</div>
+          <div className="stat-content">
+            <div className="stat-label">Empresas Únicas</div>
+            <div className="stat-value">{stats.uniqueCompanies}</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">💰</div>
+          <div className="stat-content">
+            <div className="stat-label">Salário Médio</div>
+            <div className="stat-value">{formatSalary(stats.averageSalary)}</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">🌍</div>
+          <div className="stat-content">
+            <div className="stat-label">Regiões</div>
+            <div className="stat-value">{Object.keys(stats.jobsByRegion).length}</div>
+          </div>
+        </div>
+      </div>
 
       <div className="filters-section">
         <h2>🔍 Filtros</h2>
@@ -368,31 +481,47 @@ export default function Dashboard() {
         {filteredJobs.length === 0 ? (
           <div className="no-results">Nenhuma vaga encontrada com os filtros aplicados.</div>
         ) : (
-          <div className="table-responsive">
-            <table className="jobs-table">
-              <thead>
-                <tr>
-                  <th>Empresa</th>
-                  <th>Cargo</th>
-                  <th>Localização</th>
-                  <th>Região</th>
-                  <th>Salário</th>
-                  <th>Data</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredJobs.map((job, index) => (
-                  <tr key={index}>
-                    <td>{job.company || '-'}</td>
-                    <td>{job.job_title || '-'}</td>
-                    <td>{job.location || '-'}</td>
-                    <td>{job.source_region || '-'}</td>
-                    <td>{job.salary_raw || '-'}</td>
-                    <td>{new Date(job.collected_at).toLocaleDateString('pt-BR')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="jobs-grid">
+            {filteredJobs.map((job, index) => (
+              <div key={index} className="job-card">
+                <div className="job-card-header">
+                  <h3 className="job-title">{job.job_title || 'Sem título'}</h3>
+                  <span className="job-badge">{job.source_region || 'N/A'}</span>
+                </div>
+
+                <div className="job-card-body">
+                  <div className="job-info">
+                    <span className="info-label">🏢 Empresa:</span>
+                    <span className="info-value">{job.company || '-'}</span>
+                  </div>
+
+                  <div className="job-info">
+                    <span className="info-label">📍 Localização:</span>
+                    <span className="info-value">{job.location || '-'}</span>
+                  </div>
+
+                  <div className="job-info">
+                    <span className="info-label">💰 Salário:</span>
+                    <span className="info-value salary">{job.salary_raw || '-'}</span>
+                  </div>
+
+                  <div className="job-info">
+                    <span className="info-label">📅 Data:</span>
+                    <span className="info-value">{formatDate(job.collected_at)}</span>
+                  </div>
+                </div>
+
+                <div className="job-card-footer">
+                  {job.url ? (
+                    <a href={job.url} target="_blank" rel="noopener noreferrer" className="job-link">
+                      🔗 Ver Vaga
+                    </a>
+                  ) : (
+                    <span className="job-link-disabled">Sem link</span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
