@@ -1,0 +1,69 @@
+{
+  "name": "Job Dashboard",
+  "description": "Dashboard interativo para visualizar e filtrar vagas de emprego do Baserow",
+  "version": "1.0.0",
+  "services": [
+    {
+      "name": "backend",
+      "image": "node:18-alpine",
+      "ports": ["8000:8000"],
+      "environment": {
+        "NODE_ENV": "production",
+        "PORT": "8000",
+        "BASEROW_URL": "${BASEROW_URL}",
+        "BASEROW_TOKEN": "${BASEROW_TOKEN}",
+        "TABLE_ID": "${TABLE_ID}"
+      },
+      "volumes": [
+        {
+          "source": "./backend",
+          "target": "/app"
+        }
+      ],
+      "restart": "unless-stopped"
+    },
+    {
+      "name": "frontend",
+      "image": "nginx:alpine",
+      "ports": ["3000:3000"],
+      "environment": {
+        "VITE_API_URL": "http://backend:8000/api"
+      },
+      "depends_on": ["backend"],
+      "restart": "unless-stopped"
+    }
+  ],
+  "environment_variables": [
+    {
+      "name": "BASEROW_URL",
+      "description": "URL da API do Baserow",
+      "default": "https://n8n-baserow.v6s8rs.easypanel.host/api/database/rows/table",
+      "required": true
+    },
+    {
+      "name": "BASEROW_TOKEN",
+      "description": "Token de autenticação do Baserow",
+      "required": true,
+      "secret": true
+    },
+    {
+      "name": "TABLE_ID",
+      "description": "ID da tabela no Baserow",
+      "default": "699",
+      "required": true
+    }
+  ],
+  "ports": [
+    {
+      "name": "Frontend",
+      "port": 3000,
+      "protocol": "http"
+    },
+    {
+      "name": "Backend",
+      "port": 8000,
+      "protocol": "http"
+    }
+  ],
+  "documentation": "https://github.com/seu-usuario/job-dashboard#readme"
+}
