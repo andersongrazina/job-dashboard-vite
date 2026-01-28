@@ -3,6 +3,8 @@ import axios from 'axios'
 import Calendar from 'react-calendar'
 import 'react-calendar/dist/Calendar.css'
 import './Dashboard.css'
+import Charts from './Charts'
+import { exportToCSV, exportToExcel, exportStatsToExcel } from './exportUtils'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
@@ -14,6 +16,8 @@ export default function Dashboard() {
   const [showSettings, setShowSettings] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
+  const [favorites, setFavorites] = useState([])
+  const [showOnlyFavorites, setShowOnlyFavorites] = useState(false)
 
   // Estatísticas
   const [stats, setStats] = useState({
@@ -55,6 +59,10 @@ export default function Dashboard() {
     setDarkMode(savedDarkMode)
     document.documentElement.setAttribute('data-theme', savedDarkMode ? 'dark' : 'light')
 
+    // Carregar favoritos
+    const savedFavorites = JSON.parse(localStorage.getItem('favorites') || '[]')
+    setFavorites(savedFavorites)
+
     loadSettings()
     loadJobs()
   }, [])
@@ -63,13 +71,18 @@ export default function Dashboard() {
   useEffect(() => {
     applyFilters()
     calculateStats()
-  }, [jobs, filters])
+  }, [jobs, filters, showOnlyFavorites, favorites])
 
   // Salvar preferência de dark mode
   useEffect(() => {
     localStorage.setItem('darkMode', darkMode)
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
+
+  // Salvar favoritos
+  useEffect(() => {
+    localStorage.setItem('favorites', JSON.stringify(favorites))
+  }, [favorites])
 
   const loadSettings = async () => {
     try {
@@ -100,7 +113,9 @@ export default function Dashboard() {
   }
 
   const calculateStats = () => {
-    if (filteredJobs.length === 0) {
+    const jobsToAnalyze = showOnlyFavorites ? filteredJobs : filteredJobs
+
+    if (jobsToAnalyze.length === 0) {
       setStats({
         totalJobs: 0,
         uniqueCompanies: 0,
@@ -111,20 +126,20 @@ export default function Dashboard() {
     }
 
     // Total de vagas
-    const totalJobs = filteredJobs.length
+    const totalJobs = jobsToAnalyze.length
 
     // Empresas únicas
-    const uniqueCompanies = new Set(filteredJobs.map(job => job.company)).size
+    const uniqueCompanies = new Set(jobsToAnalyze.map(job => job.company)).size
 
     // Salário médio
-    const salaries = filteredJobs
+    const salaries = jobsToAnalyze
       .map(job => extractSalary(job.salary_raw))
       .filter(salary => salary > 0)
     const averageSalary = salaries.length > 0 ? Math.round(salaries.reduce((a, b) => a + b, 0) / salaries.length) : 0
 
     // Vagas por região
     const jobsByRegion = {}
-    filteredJobs.forEach(job => {
+    jobsToAnalyze.forEach(job => {
       const region = job.source_region || 'Não especificado'
       jobsByRegion[region] = (jobsByRegion[region] || 0) + 1
     })
@@ -177,6 +192,11 @@ export default function Dashboard() {
         }
         return true
       })
+    }
+
+    // Filtro de favoritos
+    if (showOnlyFavorites) {
+      filtered = filtered.filter(job => favorites.includes(job.id))
     }
 
     // Ordenação
@@ -237,6 +257,7 @@ export default function Dashboard() {
       sortBy: 'collected_at',
       sortOrder: 'desc'
     })
+    setShowOnlyFavorites(false)
   }
 
   const handleSettingsChange = (e) => {
@@ -257,6 +278,20 @@ export default function Dashboard() {
     } catch (err) {
       alert('Erro ao salvar configurações: ' + err.message)
     }
+  }
+
+  const toggleFavorite = (jobId) => {
+    setFavorites(prev => {
+      if (prev.includes(jobId)) {
+        return prev.filter(id => id !== jobId)
+      } else {
+        return [...prev, jobId]
+      }
+    })
+  }
+
+  const isFavorite = (jobId) => {
+    return favorites.includes(jobId)
   }
 
   const formatSalary = (salary) => {
@@ -371,6 +406,9 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Gráficos */}
+      {!loading && jobs.length > 0 && <Charts jobs={filteredJobs} darkMode={darkMode} />}
+
       <div className="filters-section">
         <h2>🔍 Filtros</h2>
         <div className="filters-grid">
@@ -465,8 +503,39 @@ export default function Dashboard() {
           <button className="btn-primary" onClick={loadJobs}>
             🔄 Recarregar
           </button>
+          <button 
+            className={`btn-favorite ${showOnlyFavorites ? 'active' : ''}`}
+            onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
+            title="Mostrar apenas favoritos"
+          >
+            ❤️ Favoritos ({favorites.length})
+          </button>
           <button className="btn-secondary" onClick={clearFilters}>
             🗑️ Limpar Filtros
+          </button>
+        </div>
+
+        <div className="export-actions">
+          <button 
+            className="btn-export"
+            onClick={() => exportToCSV(filteredJobs, `vagas_${new Date().toISOString().split('T')[0]}.csv`)}
+            title="Exportar para CSV"
+          >
+            📄 CSV
+          </button>
+          <button 
+            className="btn-export"
+            onClick={() => exportToExcel(filteredJobs, `vagas_${new Date().toISOString().split('T')[0]}.xlsx`)}
+            title="Exportar para Excel"
+          >
+            📊 Excel
+          </button>
+          <button 
+            className="btn-export"
+            onClick={() => exportStatsToExcel(filteredJobs, stats, `relatorio_${new Date().toISOString().split('T')[0]}.xlsx`)}
+            title="Exportar relatório completo"
+          >
+            📈 Relatório
           </button>
         </div>
       </div>
@@ -486,7 +555,16 @@ export default function Dashboard() {
               <div key={index} className="job-card">
                 <div className="job-card-header">
                   <h3 className="job-title">{job.job_title || 'Sem título'}</h3>
-                  <span className="job-badge">{job.source_region || 'N/A'}</span>
+                  <div className="job-card-actions">
+                    <button
+                      className={`favorite-btn ${isFavorite(job.id) ? 'active' : ''}`}
+                      onClick={() => toggleFavorite(job.id)}
+                      title={isFavorite(job.id) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+                    >
+                      {isFavorite(job.id) ? '❤️' : '🤍'}
+                    </button>
+                    <span className="job-badge">{job.source_region || 'N/A'}</span>
+                  </div>
                 </div>
 
                 <div className="job-card-body">
