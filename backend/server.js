@@ -63,7 +63,7 @@ app.post('/api/settings', (req, res) => {
   }
 });
 
-// GET /api/jobs - Obter todas as vagas do Baserow
+// GET /api/jobs - Obter todas as vagas do Baserow (com paginação)
 app.get('/api/jobs', async (req, res) => {
   try {
     // Verificar cache
@@ -72,28 +72,43 @@ app.get('/api/jobs', async (req, res) => {
       return res.json({
         data: cachedData,
         cached: true,
+        total: cachedData.length,
         timestamp: new Date().toISOString()
       });
     }
 
-    const url = `${config.baserowUrl}/${config.tableId}/?user_field_names=true`;
+    let allJobs = [];
+    let page = 1;
+    let hasMore = true;
 
-    const response = await axios.get(url, {
-      headers: {
-        'Authorization': `Token ${config.baserowToken}`,
-        'Content-Type': 'application/json'
+    // Buscar todas as páginas
+    while (hasMore) {
+      const url = `${config.baserowUrl}/${config.tableId}/?user_field_names=true&page=${page}&size=200`;
+
+      const response = await axios.get(url, {
+        headers: {
+          'Authorization': `Token ${config.baserowToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const results = response.data.results || [];
+      
+      if (results.length === 0) {
+        hasMore = false;
+      } else {
+        allJobs = allJobs.concat(results);
+        page++;
       }
-    });
-
-    const jobs = response.data.results || [];
+    }
 
     // Armazenar em cache
-    cache.set('jobs', jobs);
+    cache.set('jobs', allJobs);
 
     res.json({
-      data: jobs,
+      data: allJobs,
       cached: false,
-      total: jobs.length,
+      total: allJobs.length,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
