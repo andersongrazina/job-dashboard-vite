@@ -184,12 +184,21 @@ export default function Dashboard() {
     if (filters.dateFrom || filters.dateTo) {
       filtered = filtered.filter(job => {
         const jobDate = new Date(job.collected_at)
-        if (filters.dateFrom && jobDate < new Date(filters.dateFrom)) return false
+        // Remover hora para comparar apenas a data
+        jobDate.setHours(0, 0, 0, 0)
+        
+        if (filters.dateFrom) {
+          const startDate = new Date(filters.dateFrom)
+          startDate.setHours(0, 0, 0, 0)
+          if (jobDate < startDate) return false
+        }
+        
         if (filters.dateTo) {
           const endDate = new Date(filters.dateTo)
           endDate.setHours(23, 59, 59, 999)
           if (jobDate > endDate) return false
         }
+        
         return true
       })
     }
